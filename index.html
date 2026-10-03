@@ -639,12 +639,18 @@
         if (currentHearts <= 0) setTimeout(closeModal, 500); else if (wrongAttempts >= 3) showHint();
       }
     }
-    // Trigger Fullscreen on her very first tap/touch
-    document.body.addEventListener('touchstart', () => {
+// Aggressive Fullscreen Trigger
+    function goFullScreen() {
       if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(err => {});
       }
-    }, { once: true });
+      // Remove listeners after it works so it doesn't slow down the game
+      document.body.removeEventListener('click', goFullScreen);
+      document.body.removeEventListener('touchend', goFullScreen);
+    }
+
+    document.body.addEventListener('click', goFullScreen);
+    document.body.addEventListener('touchend', goFullScreen);
   </script>
 </body>
 </html>
