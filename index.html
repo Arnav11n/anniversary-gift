@@ -639,6 +639,12 @@
         if (currentHearts <= 0) setTimeout(closeModal, 500); else if (wrongAttempts >= 3) showHint();
       }
     }
+    // Trigger Fullscreen on her very first tap/touch
+    document.body.addEventListener('touchstart', () => {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(err => {});
+      }
+    }, { once: true });
   </script>
 </body>
 </html>
