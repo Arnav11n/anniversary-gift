@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Anniversary Maze</title>
+  <style>
+    :root { --primary: #ff4d94; --bg: #1a0f1a; --glass: rgba(20, 10, 20, 0.95); }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; touch-action: none; font-family: 'Segoe UI', Tahoma, sans-serif; }
+    body { background: var(--bg); display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; }
+
+    /* HUD */
+    #hud { width: 100%; height: 55px; background: var(--glass); border-bottom: 2px solid var(--primary); display: flex; justify-content: space-between; align-items: center; padding: 0 15px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    #hearts { font-size: 22px; }
+    #inventory { display: flex; gap: 8px; font-weight: bold; color: #fff; align-items: center; }
+    .key-icon { width: 22px; height: 22px; border-radius: 5px; border: 2px solid #fff; opacity: 0.2; display: flex; justify-content: center; align-items: center; font-size: 12px; transition: 0.3s; }
+    .key-icon.active { opacity: 1; box-shadow: 0 0 12px currentColor; transform: scale(1.1); }
+    
+    /* Game Canvas */
+    #game-container { flex-grow: 1; position: relative; background: #2c3e2e; }
+    canvas { display: block; width: 100%; height: 100%; outline: none; }
+
+    /* Mobile Controls */
+    #controls { width: 100%; height: 160px; background: var(--glass); border-top: 2px solid var(--primary); display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; z-index: 10; }
+    
+    .joystick-base { position: relative; width: 130px; height: 130px; background: rgba(255, 77, 148, 0.1); border: 2px solid rgba(255, 77, 148, 0.3); border-radius: 50%; display: flex; justify-content: center; align-items: center; }
+    .joystick-knob { width: 60px; height: 60px; background: rgba(255, 77, 148, 0.8); border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5); position: absolute; transition: transform 0.1s; }
+    
+    .btn-group { display: flex; gap: 15px; }
+    .game-btn { width: 75px; height: 75px; border-radius: 50%; color: #fff; font-weight: bold; font-size: 13px; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 5px 20px rgba(0,0,0,0.5); transition: all 0.2s; border: 3px solid rgba(255,255,255,0.4); cursor: pointer; }
+    .game-btn:active { transform: scale(0.9); }
+    #btn-shoot { background: linear-gradient(135deg, #00c6ff, #0072ff); box-shadow: 0 5px 15px rgba(0, 198, 255, 0.5); }
+    #btn-action { background: linear-gradient(135deg, #ff0844, #ffb199); box-shadow: 0 5px 15px rgba(255, 8, 68, 0.6); }
+    #btn-action.disabled { background: #444; border-color: #333; color: #888; box-shadow: none; pointer-events: none; opacity: 0.5; }
+    .btn-icon { font-size: 22px; margin-bottom: 2px; }
+
+    /* Modals */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; padding: 15px; }
+    .modal.active { display: flex; }
+    .modal-content { background: var(--glass); border: 2px solid var(--primary); border-radius: 20px; padding: 25px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 0 40px rgba(255, 77, 148, 0.4); }
+    .modal h2 { color: var(--primary); margin-bottom: 15px; font-size: 24px; }
+    .media-box { width: 100%; border-radius: 10px; overflow: hidden; background: #000; margin-bottom: 15px; display: none; pointer-events: none; }
+    .media-box video, .media-box img { width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 0 auto; pointer-events: none; }
+    input[type="text"] { width: 100%; padding: 14px; background: rgba(0,0,0,0.5); border: 1px solid var(--primary); border-radius: 10px; color: #fff; font-size: 16px; text-align: center; margin-bottom: 10px; outline: none; }
+    .btn-row { display: flex; gap: 10px; margin-top: 15px; }
+    .btn-row button { flex: 1; padding: 14px; border: none; border-radius: 10px; font-weight: bold; font-size: 15px; cursor: pointer; }
+    .btn-hint { background: rgba(255, 215, 0, 0.2); color: #ffd700; border: 1px solid #ffd700; }
+    .btn-submit { background: var(--primary); color: #fff; flex: 2 !important; box-shadow: 0 4px 10px rgba(255, 77, 148, 0.4); }
+    .btn-close { background: transparent; color: #aaa; border: 1px solid #555; }
+    .hint-box { display: none; background: rgba(255, 215, 0, 0.1); border: 1px dashed #ffd700; color: #ffd700; padding: 12px; border-radius: 8px; font-size: 14px; margin: 10px 0; }
+    .feedback { font-size: 15px; font-weight: bold; height: 20px; margin-top: 10px; }
+
+    /* Custom In-Game Alert */
+    #alertModal .modal-content { border-color: #ffb6c1; }
+    #alertModal h2 { color: #ffb6c1; }
+
+    /* Subway Surfers Key Reveal Animation */
+    #key-reveal-container { display: none; position: fixed; inset: 0; z-index: 2000; justify-content: center; align-items: center; flex-direction: column; background: rgba(0,0,0,0.8); }
+    .key-3d { font-size: 100px; filter: drop-shadow(0 0 30px currentColor); animation: spinKey 1.5s ease-out forwards; }
+    @keyframes spinKey { 0% { transform: scale(0) rotateY(0deg); opacity: 0; } 20% { transform: scale(1.5) rotateY(360deg); opacity: 1; } 80% { transform: scale(1.5) rotateY(1080deg); opacity: 1; margin-top: 0; } 100% { transform: scale(0.2) rotateY(1440deg); opacity: 0; margin-top: -300px; } }
+    #key-reveal-text { color: #fff; font-size: 28px; font-weight: bold; margin-top: 20px; text-shadow: 0 4px 10px #000; animation: fadeInOut 1.5s forwards; }
+    @keyframes fadeInOut { 0% {opacity: 0;} 20% {opacity: 1;} 80% {opacity: 1;} 100% {opacity: 0;} }
+  </style>
+</head>
+<body>
+
+  <div id="hud">
+    <div id="hearts">❤️❤️❤️</div>
+    <div id="inventory">
+      Keys: 
+      <div id="key-r" class="key-icon" style="background: #ff3333; color: #fff;">1</div>
+      <div id="key-g" class="key-icon" style="background: #33ff33; color: #000;">2</div>
+      <div id="key-b" class="key-icon" style="background: #3388ff; color: #fff;">3</div>
+      <div id="key-p" class="key-icon" style="background: #ff69b4; color: #fff;">4</div>
+    </div>
+  </div>
+
+  <div id="game-container"><canvas id="gameCanvas"></canvas></div>
+
+  <div id="controls">
+    <div class="joystick-base" id="joystick"><div class="joystick-knob" id="knob"></div></div>
+    <div class="btn-group">
+      <div class="game-btn" id="btn-shoot"><span class="btn-icon">⚡</span> SHOOT</div>
+      <div class="game-btn disabled" id="btn-action"><span class="btn-icon">💖</span> OPEN</div>
+    </div>
+  </div>
+
+  <!-- MODALS -->
+  <div class="modal" id="puzzleModal">
+    <div class="modal-content">
+      <h2 id="m-title">Memory Locked</h2>
+      <div class="media-box" id="m-media"></div>
+      <p id="m-question" style="color: #fff; margin-bottom: 15px; font-weight: bold; line-height: 1.4;"></p>
+      <input type="text" id="m-input" placeholder="Type answer...">
+      <div class="hint-box" id="m-hint-box"></div>
+      <div class="btn-row">
+        <button class="btn-hint" onclick="showHint()">💡 Hint</button>
+        <button class="btn-submit" onclick="checkAnswer()">Unlock</button>
+      </div>
+      <div class="btn-row"><button class="btn-close" onclick="closeModal()">Walk Away</button></div>
+      <div class="feedback" id="m-feedback"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="deathModal">
+    <div class="modal-content">
+      <h2 style="color: #ff3333; font-size: 32px;">You Fainted!</h2>
+      <p style="color: #fff; margin-bottom: 25px; line-height: 1.6; font-size: 16px;">The monsters overwhelmed you!<br>Don't worry, your keys and opened doors are perfectly safe.</p>
+      <button class="btn-submit" style="width: 100%; padding: 16px;" onclick="respawn()">Wake Up 💖</button>
+    </div>
+  </div>
+
+  <!-- IN-GAME CUSTOM ALERT -->
+  <div class="modal" id="alertModal">
+    <div class="modal-content">
+      <h2>Door Locked!</h2>
+      <p style="color: #fff; margin-bottom: 25px; line-height: 1.5; font-size: 16px;">You need the matching colored key to open this door. Explore the maze to find it!</p>
+      <button class="btn-submit" style="width: 100%; padding: 16px;" onclick="closeAlert()">Okay</button>
+    </div>
+  </div>
+
+  <div class="modal" id="winModal">
+    <div class="modal-content" style="background: linear-gradient(135deg, #38122a, #1a0f1a); border-color: #ffb6c1;">
+      <h2 style="font-size: 32px; color: #ffb6c1;">✨ You Escaped! ✨</h2>
+      <p style="color: #fff; font-size: 18px; line-height: 1.6; margin: 25px 0;">
+        Happy 3rd Anniversary, My Love.<br><br>
+        Thank you for 3 years of unforgettable moments, laughter, and navigating every maze together. I love you! 💖
+      </p>
+    </div>
+  </div>
+
+  <div id="key-reveal-container">
+    <div id="key-reveal-icon" class="key-3d">🔑</div>
+    <div id="key-reveal-text">You found the Key!</div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. GAME DATA & LOGIC
+    // ==========================================
+    const puzzles = {
+      "1": { title: "Memory 01", type: "video", media: "assets/metro.mp4", question: "Visuals only: What was I complaining about right here?", hint: "The train taking forever...", check: (i) => i.toLowerCase().includes("metro") || i.toLowerCase().includes("train"), reward: 'r', color: '#ff3333', name: 'Red' },
+      "2": { title: "Memory 02", type: "image", media: "assets/dandiya.jpg", question: "Where exactly were we celebrating here?", hint: "Colorful sticks and dancing!", check: (i) => i.toLowerCase().includes("dandiya") || i.toLowerCase().includes("garba"), reward: 'g', color: '#33ff33', name: 'Green' },
+      "3": { title: "Memory 03", type: "text", media: null, question: "What exact nickname do I call you when I am annoyed?", hint: "Two words. Sounds like 'My Mother' in Hindi.", check: (i) => i.toLowerCase().replace(/[^a-z]/g,'').includes("merimaa"), reward: 'b', color: '#3388ff', name: 'Blue' },
+      "4": { title: "Memory 04", type: "text", media: null, question: "Chronological order (4 digits):\n1) First kiss\n2) First trip\n3) Telling parents\n4) The ring", hint: "Kiss, Trip, Ring, Parents! (1243)", check: (i) => i.replace(/[^0-9]/g,'') === "1243", reward: 'p', color: '#ff69b4', name: 'Pink' }
+    };
+
+    let keysHeld = { r: false, g: false, b: false, p: false };
+    let maxHearts = 3; let currentHearts = 3;
+    let isPaused = false; let activeInteractable = null; let wrongAttempts = 0;
+
+    // ==========================================
+    // 2. OPEN-SPACE MAZE MAP
+    // ==========================================
+    let rawMap = [
+      "################################",
+      "#S.......#...#................M#",
+      "#........#.#.#.....##########..#",
+      "#######..#.#.#..T..#3..........#",
+      "#.....#..#.#.#.....#############",
+      "#.###....#.#.#.....#...T#M....M#",
+      "#.#M#.#..#...#.....#...4#......#",
+      "#.#.#.#..#.#.#.....#.####......#",
+      "#.#.#.#..#M#.#.....#.#..#......#",
+      "#.#.#.#..###.###g###b#..#......#",
+      "#.#.#.#..r...........#..#......#",
+      "#...#.####..........T#..#......#",
+      "#.#.#....#...........#..#....T.#",
+      "#.######.#.....#######.........#",
+      "#.....1#.#...###........###....#",
+      "########.#...p............#....#",
+      "#T.......#..########...T..#..~.#",
+      "#.....####..#........######.~E~#",
+      "#....2#...M.#M.......#.......~M#",
+      "################################"
+    ];
+
+    const TS = 60; 
+    let map = []; let monsters = []; let startPos = {x:0, y:0};
+
+    function initMap() {
+      map = [];
+      for(let row=0; row<rawMap.length; row++) {
+        let mapRow = [];
+        for(let col=0; col<rawMap[row].length; col++) {
+          let char = rawMap[row][col];
+          if (char === 'S') { startPos = { x: col*TS+TS/2, y: row*TS+TS/2 }; mapRow.push('.'); }
+          else if (char === 'M' || char === 'T') { mapRow.push('.'); }
+          else { mapRow.push(char); }
+        }
+        map.push(mapRow);
+      }
+    }
+
+    function spawnMonsters() {
+      monsters = [];
+      for(let row=0; row<rawMap.length; row++) {
+        for(let col=0; col<rawMap[row].length; col++) {
+          let char = rawMap[row][col];
+          if (char === 'M') { monsters.push({ type: 'chaser', sx: col*TS+TS/2, sy: row*TS+TS/2, x: col*TS+TS/2, y: row*TS+TS/2, vx: 0, vy: 0, state: 'wander', hp: 1, lastSeenX: null, lastSeenY: null, turnCooldown: 0 }); }
+          else if (char === 'T') { monsters.push({ type: 'territorial', sx: col*TS+TS/2, sy: row*TS+TS/2, x: col*TS+TS/2, y: row*TS+TS/2, vx: 0, vy: 0, state: 'wander', hp: 1, turnCooldown: 0 }); }
+        }
+      }
+    }
+
+    initMap(); spawnMonsters();
+
+    let player = { x: startPos.x, y: startPos.y, speed: 3.0, vx: 0, vy: 0, dirX: 0, dirY: 1, dir: 'down', animTime: 0, invuln: 0 };
+    let bullets = [];
+
+    // ==========================================
+    // 3. GRAPHICS ENGINE
+    // ==========================================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    function resize() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
+    window.addEventListener('resize', resize); resize();
+
+    function drawWorld() {
+      ctx.fillStyle = '#223322'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      let camX = Math.max(0, Math.min(player.x - canvas.width/2, map[0].length*TS - canvas.width));
+      let camY = Math.max(0, Math.min(player.y - canvas.height/2, map.length*TS - canvas.height));
+      
+      ctx.save(); ctx.translate(-camX, -camY);
+
+      for(let r=0; r<map.length; r++) {
+        for(let c=0; c<map[0].length; c++) {
+          let tile = map[r][c];
+          let tx = c*TS; let ty = r*TS;
+          
+          if(tx+TS<camX || tx>camX+canvas.width || ty+TS<camY || ty>camY+canvas.height) continue; 
+
+          ctx.fillStyle = (r+c)%2===0 ? '#48bb78' : '#38a169'; ctx.fillRect(tx, ty, TS, TS);
+
+          // Pink Flowers
+          if (tile === '~') {
+            let bob = Math.sin(Date.now()*0.003 + r)*2;
+            ctx.fillStyle = '#ff69b4'; 
+            ctx.beginPath(); ctx.arc(tx+25, ty+30+bob, 5, Math.PI, 0); ctx.arc(tx+35, ty+30+bob, 5, Math.PI, 0); ctx.lineTo(tx+30, ty+40+bob); ctx.fill();
+            ctx.fillStyle = '#2f855a'; ctx.fillRect(tx+29, ty+40+bob, 2, 8);
+          }
+          else if (tile === '#') { 
+            ctx.fillStyle = '#2d3748'; ctx.fillRect(tx, ty+10, TS, TS-10); 
+            ctx.fillStyle = '#4a5568'; ctx.fillRect(tx, ty, TS, TS-10); 
+            ctx.strokeStyle = '#1a202c'; ctx.strokeRect(tx, ty, TS, TS);
+          }
+          else if (['1','2','3','4'].includes(tile)) { 
+            let bob = Math.sin(Date.now()*0.003 + r)*3;
+            ctx.fillStyle = '#ecc94b'; ctx.fillRect(tx+35, ty+35+bob, 20, 20);
+            ctx.fillStyle = '#b7791f'; ctx.fillRect(tx+35, ty+40+bob, 20, 4);
+            ctx.fillStyle = '#fff'; ctx.font = '14px Arial'; ctx.fillText('❓', tx+38, ty+49+bob);
+          }
+          else if (['r','g','b','p'].includes(tile)) { 
+            let color = tile==='r'?'#ff3333':tile==='g'?'#33ff33':tile==='b'?'#3388ff':'#ff69b4';
+            ctx.fillStyle = color; ctx.fillRect(tx, ty, TS, TS);
+            ctx.fillStyle = '#fff'; ctx.font = '26px Arial'; ctx.fillText('🔒', tx+15, ty+38);
+          }
+          else if (tile === 'E') { 
+            let glow = Math.abs(Math.sin(Date.now()*0.002)) * 8;
+            ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.arc(tx+TS/2, ty+TS/2, 22+glow, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = '26px Arial'; ctx.fillText('✨', tx+14, ty+40);
+          }
+        }
+      }
+
+      for (let m of monsters) {
+        let bob = Math.abs(Math.sin(Date.now()*0.01)) * 6;
+        if (m.type === 'chaser') {
+          ctx.fillStyle = m.state === 'chase' ? '#d53f8c' : '#9f7aea'; 
+          ctx.beginPath(); ctx.arc(m.x, m.y-bob, 15, Math.PI, 0); ctx.lineTo(m.x+15, m.y+10-bob); ctx.lineTo(m.x+5, m.y+5-bob); ctx.lineTo(m.x-5, m.y+10-bob); ctx.lineTo(m.x-15, m.y+5-bob); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(m.x-6, m.y-3-bob, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(m.x+6, m.y-3-bob, 4, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(m.x-6+(player.x>m.x?1:-1), m.y-3-bob, 2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(m.x+6+(player.x>m.x?1:-1), m.y-3-bob, 2, 0, Math.PI*2); ctx.fill();
+        } else {
+          ctx.fillStyle = m.state === 'chase' ? '#ff6b6b' : '#e53e3e'; 
+          ctx.beginPath(); ctx.ellipse(m.x, m.y+5-bob, 18, 12, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(m.x-6, m.y+2-bob, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(m.x+6, m.y+2-bob, 4, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(m.x-6, m.y+2-bob, 1.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(m.x+6, m.y+2-bob, 1.5, 0, Math.PI*2); ctx.fill();
+        }
+      }
+
+      for (let b of bullets) {
+        ctx.fillStyle = '#00ffff'; ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI*2); ctx.fill();
+      }
+
+      if (player.invuln === 0 || Math.floor(Date.now() / 150) % 2 === 0) {
+        let px = player.x; let py = player.y;
+        let isMoving = player.vx !== 0 || player.vy !== 0;
+        let bob = isMoving ? Math.abs(Math.sin(player.animTime*0.3))*4 : 0;
+        let swing = isMoving ? Math.sin(player.animTime*0.3)*8 : 0;
+        
+        ctx.translate(px, py);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 20, 12, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.translate(0, -bob);
+
+        ctx.fillStyle = '#222';
+        if(player.dir==='left' || player.dir==='right') { ctx.beginPath(); ctx.arc(swing, 18, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-swing, 18, 4, 0, Math.PI*2); ctx.fill(); } 
+        else { ctx.beginPath(); ctx.arc(-5, 18+swing, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(5, 18-swing, 4, 0, Math.PI*2); ctx.fill(); }
+
+        ctx.fillStyle = '#ff4d94'; ctx.beginPath(); ctx.moveTo(-10, 10); ctx.lineTo(10, 10); ctx.lineTo(6, -5); ctx.lineTo(-6, -5); ctx.fill();
+
+        ctx.fillStyle = '#ffe0cc'; ctx.beginPath(); ctx.arc(0, -10, 10, 0, Math.PI*2); ctx.fill(); 
+        ctx.fillStyle = '#4a2511';
+        if (player.dir === 'down') { ctx.beginPath(); ctx.arc(0, -12, 11, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillRect(-5, -12, 2, 3); ctx.fillRect(3, -12, 2, 3); } 
+        else if (player.dir === 'up') { ctx.beginPath(); ctx.arc(0, -10, 11, 0, Math.PI*2); ctx.fill(); } 
+        else if (player.dir === 'right') { ctx.beginPath(); ctx.arc(0, -12, 11, Math.PI, 0); ctx.fill(); ctx.beginPath(); ctx.arc(-10, -5, 6, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillRect(4, -12, 2, 3); } 
+        else if (player.dir === 'left') { ctx.beginPath(); ctx.arc(0, -12, 11, Math.PI, 0); ctx.fill(); ctx.beginPath(); ctx.arc(10, -5, 6, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillRect(-6, -12, 2, 3); }
+        ctx.translate(0, bob); ctx.translate(-px, -py);
+      }
+      ctx.restore();
+    }
+
+    // ==========================================
+    // 4. PHYSICS & ULTRA SMART AI
+    // ==========================================
+    function isWalkable(nx, ny, type = 'player') {
+      // Increased Player Hitbox (6x14) - Slim Monster hitbox (8x10) to prevent corner snagging
+      let sizeX = type === 'proj' ? 2 : type === 'monster' ? 8 : 6; 
+      let sizeY = type === 'proj' ? 2 : type === 'monster' ? 10 : 14; 
+      const corners = [
+        {c: Math.floor((nx-sizeX)/TS), r: Math.floor((ny-sizeY)/TS)},
+        {c: Math.floor((nx+sizeX)/TS), r: Math.floor((ny-sizeY)/TS)},
+        {c: Math.floor((nx-sizeX)/TS), r: Math.floor((ny+sizeY)/TS)},
+        {c: Math.floor((nx+sizeX)/TS), r: Math.floor((ny+sizeY)/TS)}
+      ];
+      for (let pt of corners) {
+        if(pt.r<0 || pt.r>=map.length || pt.c<0 || pt.c>=map[0].length) return false;
+        if (['#','r','g','b','p'].includes(map[pt.r][pt.c])) return false; 
+      }
+      return true;
+    }
+
+    function hasLineOfSight(x1, y1, x2, y2) {
+      let dist = Math.hypot(x2 - x1, y2 - y1);
+      let steps = Math.ceil(dist / 5); 
+      for(let i=0; i<=steps; i++) {
+        let cx = x1 + (x2 - x1) * (i/steps);
+        let cy = y1 + (y2 - y1) * (i/steps);
+        let r = Math.floor(cy/TS); let c = Math.floor(cx/TS);
+        if(r<0 || r>=map.length || c<0 || c>=map[0].length) return false;
+        if (['#','r','g','b','p'].includes(map[r][c])) return false; 
+      }
+      return true;
+    }
+
+    function update() {
+      if(isPaused) return;
+
+      // Player Movement
+      let moving = false;
+      if (player.vx !== 0) { if(isWalkable(player.x + player.vx, player.y, 'player')) { player.x += player.vx; moving=true; player.dir = player.vx>0?'right':'left'; } }
+      if (player.vy !== 0) { if(isWalkable(player.x, player.y + player.vy, 'player')) { player.y += player.vy; moving=true; player.dir = player.vy>0?'down':'up'; } }
+      
+      if(moving) { 
+        player.animTime++; 
+        // Strict Straight Shooting Locked to Dominant Axis
+        if (Math.abs(player.vx) >= Math.abs(player.vy)) { player.dirX = player.vx > 0 ? 1 : -1; player.dirY = 0; } 
+        else { player.dirX = 0; player.dirY = player.vy > 0 ? 1 : -1; }
+      }
+      if(player.invuln > 0) player.invuln--;
+
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.x += b.dx * b.speed; b.y += b.dy * b.speed;
+        
+        if (!isWalkable(b.x, b.y, 'proj')) { bullets.splice(i, 1); continue; } 
+        
+        let hit = false;
+        for(let j = monsters.length - 1; j >= 0; j--) {
+          let m = monsters[j];
+          if (Math.hypot(b.x - m.x, b.y - m.y) < 40) { 
+            m.hp--; if(m.hp <= 0) monsters.splice(j, 1);
+            hit = true; break;
+          }
+        }
+        if (hit) bullets.splice(i, 1);
+      }
+
+      // Ultra Smart Pac-Man Monster AI
+      for(let m of monsters) {
+        if (!m.turnCooldown) m.turnCooldown = 0;
+        if (m.turnCooldown > 0) m.turnCooldown--;
+
+        let dist = Math.hypot(player.x - m.x, player.y - m.y);
+        let los = hasLineOfSight(m.x, m.y, player.x, player.y);
+        let mSpeed = 1.4; 
+        
+        if (m.type === 'chaser') {
+          // Purple Chaser: Box wandering, smooth advanced chase!
+          if (los) { m.state = 'chase'; m.lastSeenX = player.x; m.lastSeenY = player.y; } 
+          else if (m.state === 'chase' && !los) { m.state = 'search'; }
+
+          if (m.state === 'chase' || m.state === 'search') {
+            let tx = m.state === 'chase' ? player.x : m.lastSeenX;
+            let ty = m.state === 'chase' ? player.y : m.lastSeenY;
+            let tDist = Math.hypot(tx - m.x, ty - m.y);
+            
+            if (tDist < 10 && m.state === 'search') { 
+              m.state = 'wander'; 
+              m.x = Math.floor(m.x/TS)*TS + TS/2;
+              m.y = Math.floor(m.y/TS)*TS + TS/2;
+              m.vx = 0; m.vy = 0;
+            } 
+            else if (tDist > 0) {
+              let dx = (tx - m.x) / tDist * mSpeed; let dy = (ty - m.y) / tDist * mSpeed;
+              let movedX = false, movedY = false;
+              if(isWalkable(m.x + dx, m.y, 'monster')) { m.x += dx; movedX = true; }
+              if(isWalkable(m.x, m.y + dy, 'monster')) { m.y += dy; movedY = true; }
+              
+              // Smooth Corner Sliding during chase
+              if (!movedX && movedY) { m.y += Math.sign(dy) * mSpeed * 0.9; }
+              if (!movedY && movedX) { m.x += Math.sign(dx) * mSpeed * 0.9; }
+
+              if(!movedX && !movedY && m.state === 'search') { m.state = 'wander'; m.vx = 0; m.vy = 0; }
+            }
+          } else { 
+            // Wander Pattern - Strict Box Orthogonal Movement
+            if(m.vx===0 && m.vy===0) { m.vx = mSpeed * 0.8; m.vy = 0; }
+            if(m.turnCooldown <= 0 && Math.random() < 0.02) {
+              let isVert = m.vx === 0;
+              m.vx = isVert ? (Math.random()>0.5?1:-1)*mSpeed*0.8 : 0;
+              m.vy = isVert ? 0 : (Math.random()>0.5?1:-1)*mSpeed*0.8;
+              m.turnCooldown = 60;
+            }
+            if (m.vx !== 0) {
+              if (isWalkable(m.x + m.vx, m.y, 'monster')) { m.x += m.vx; } 
+              else { m.vx = 0; m.vy = (Math.random()>0.5?1:-1)*mSpeed*0.8; m.turnCooldown = 30; }
+            } else {
+              if (isWalkable(m.x, m.y + m.vy, 'monster')) { m.y += m.vy; } 
+              else { m.vy = 0; m.vx = (Math.random()>0.5?1:-1)*mSpeed*0.8; m.turnCooldown = 30; }
+            }
+          }
+        } 
+        else if (m.type === 'territorial') {
+          let homeDist = Math.hypot(m.sx - m.x, m.sy - m.y);
+          
+          if (dist < 250 && los) { 
+            m.state = 'chase';
+            let dx = (player.x - m.x) / dist * mSpeed; let dy = (player.y - m.y) / dist * mSpeed;
+            let movedX = false, movedY = false;
+            
+            // X-AXIS BUG FIXED! Unrestricted diagonal chasing logic applied here.
+            if(isWalkable(m.x + dx, m.y, 'monster')) { m.x += dx; movedX = true; }
+            if(isWalkable(m.x, m.y + dy, 'monster')) { m.y += dy; movedY = true; }
+            
+            if (!movedX && movedY) { m.y += Math.sign(dy) * mSpeed * 0.9; }
+            if (!movedY && movedX) { m.x += Math.sign(dx) * mSpeed * 0.9; }
+          } else { 
+            m.state = 'wander';
+            if(homeDist > 180) { 
+              let dx = (m.sx - m.x) / homeDist * mSpeed * 0.8;
+              let dy = (m.sy - m.y) / homeDist * mSpeed * 0.8;
+              let movedX = false, movedY = false;
+              if(isWalkable(m.x + dx, m.y, 'monster')) { m.x += dx; movedX = true; }
+              if(isWalkable(m.x, m.y + dy, 'monster')) { m.y += dy; movedY = true; }
+              if (!movedX && movedY) { m.y += Math.sign(dy) * mSpeed * 0.8; }
+              if (!movedY && movedX) { m.x += Math.sign(dx) * mSpeed * 0.8; }
+            } else {
+              if(m.vx===0 && m.vy===0) { m.vx = mSpeed * 0.6; m.vy = 0; }
+              if(m.turnCooldown <= 0 && Math.random() < 0.02) {
+                let temp = m.vx; m.vx = m.vy; m.vy = temp;
+                if(Math.random()>0.5) { m.vx *= -1; m.vy *= -1; }
+                m.turnCooldown = 90;
+              }
+              if (m.vx !== 0) {
+                if (isWalkable(m.x + m.vx, m.y, 'monster')) { m.x += m.vx; } 
+                else { m.vx = 0; m.vy = (Math.random()>0.5?1:-1)*mSpeed*0.6; m.turnCooldown = 30; }
+              } else {
+                if (isWalkable(m.x, m.y + m.vy, 'monster')) { m.y += m.vy; } 
+                else { m.vy = 0; m.vx = (Math.random()>0.5?1:-1)*mSpeed*0.6; m.turnCooldown = 30; }
+              }
+            }
+          }
+        }
+        
+        // Auto-Center ONLY when wandering to prevent X-axis chase glitches
+        if (m.state === 'wander' && (m.vx !== 0 || m.vy !== 0)) {
+            if (m.vx !== 0 && m.vy === 0) m.y += (Math.floor(m.y/TS)*TS + TS/2 - m.y) * 0.15;
+            if (m.vy !== 0 && m.vx === 0) m.x += (Math.floor(m.x/TS)*TS + TS/2 - m.x) * 0.15;
+        }
+
+        // Damage Player
+        if (player.invuln === 0 && dist < 30) takeDamage();
+      }
+
+      // Proximity Action Check
+      let closestObj = null; let pc = Math.floor(player.x/TS); let pr = Math.floor(player.y/TS);
+      for(let r=Math.max(0, pr-1); r<=Math.min(map.length-1, pr+1); r++) {
+        for(let c=Math.max(0, pc-1); c<=Math.min(map[0].length-1, pc+1); c++) {
+          let t = map[r][c];
+          if (['1','2','3','4','r','g','b','p','E'].includes(t)) { closestObj = { r: r, c: c, type: t }; }
+        }
+      }
+      activeInteractable = closestObj;
+      const actionBtn = document.getElementById('btn-action');
+      if (activeInteractable) actionBtn.classList.remove('disabled');
+      else actionBtn.classList.add('disabled');
+    }
+
+    function gameLoop() { update(); drawWorld(); requestAnimationFrame(gameLoop); }
+    requestAnimationFrame(gameLoop);
+
+    // ==========================================
+    // 5. INPUT CONTROLS
+    // ==========================================
+    const knob = document.getElementById('knob'); const base = document.getElementById('joystick');
+    let joyActive = false;
+    
+    function setDirectionalVelocity(dx, dy, maxDist) {
+      player.vx = (dx/maxDist)*player.speed; 
+      player.vy = (dy/maxDist)*player.speed;
+    }
+
+    function handleJoy(e) {
+      if(!joyActive || isPaused) return;
+      let touch = e.touches ? e.touches[0] : e;
+      let rect = base.getBoundingClientRect();
+      let dx = touch.clientX - (rect.left + rect.width/2); let dy = touch.clientY - (rect.top + rect.height/2);
+      let dist = Math.hypot(dx, dy); let maxDist = 35;
+      if(dist > maxDist) { dx = (dx/dist)*maxDist; dy = (dy/dist)*maxDist; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      setDirectionalVelocity(dx, dy, maxDist);
+    }
+    
+    base.addEventListener('touchstart', (e) => { joyActive=true; handleJoy(e); }, {passive: false});
+    base.addEventListener('touchmove', (e) => { e.preventDefault(); handleJoy(e); }, {passive: false});
+    base.addEventListener('touchend', () => { joyActive=false; knob.style.transform='translate(0,0)'; player.vx=0; player.vy=0; });
+    base.addEventListener('mousedown', (e) => { joyActive=true; handleJoy(e); });
+    window.addEventListener('mousemove', (e) => { if(joyActive) handleJoy(e); });
+    window.addEventListener('mouseup', () => { if(joyActive){ joyActive=false; knob.style.transform='translate(0,0)'; player.vx=0; player.vy=0; } });
+
+    window.addEventListener('keydown', (e) => {
+      if(isPaused) return; let k = e.key.toLowerCase();
+      if(['arrowup','w'].includes(k)) player.vy = -player.speed; 
+      if(['arrowdown','s'].includes(k)) player.vy = player.speed; 
+      if(['arrowleft','a'].includes(k)) player.vx = -player.speed; 
+      if(['arrowright','d'].includes(k)) player.vx = player.speed; 
+      if (e.key === ' ') doAction(e);
+      if (e.key === 'Shift') shootAction(e);
+    });
+    window.addEventListener('keyup', (e) => {
+      let k = e.key.toLowerCase();
+      if(['arrowup','w','arrowdown','s'].includes(k)) player.vy = 0;
+      if(['arrowleft','a','arrowright','d'].includes(k)) player.vx = 0;
+    });
+
+    const shootAction = (e) => {
+      if(e && e.preventDefault) e.preventDefault(); if (isPaused) return;
+      let bx = player.dirX; let by = player.dirY;
+      if (bx === 0 && by === 0) by = 1; 
+      bullets.push({ x: player.x, y: player.y, dx: bx, dy: by, speed: 12 });
+    };
+    document.getElementById('btn-shoot').addEventListener('touchstart', shootAction, {passive: false});
+    document.getElementById('btn-shoot').addEventListener('mousedown', shootAction);
+
+    const doAction = (e) => {
+      if(e && e.preventDefault) e.preventDefault(); if(isPaused || !activeInteractable) return;
+      let t = activeInteractable.type;
+      
+      if(['r','g','b','p'].includes(t)) {
+        if(keysHeld[t]) map[activeInteractable.r][activeInteractable.c] = '.';
+        else { isPaused = true; document.getElementById('alertModal').classList.add('active'); }
+      }
+      else if (t === 'E') { isPaused = true; document.getElementById('winModal').classList.add('active'); }
+      else if (['1','2','3','4'].includes(t)) {
+        isPaused = true; player.vx = 0; player.vy = 0; wrongAttempts = 0;
+        let p = puzzles[t];
+        document.getElementById('m-title').innerText = p.title; document.getElementById('m-question').innerText = p.question;
+        document.getElementById('m-hint-box').innerText = p.hint; document.getElementById('m-hint-box').style.display = 'none';
+        document.getElementById('m-input').value = ""; document.getElementById('m-feedback').innerText = "";
+        
+        let mb = document.getElementById('m-media');
+        if(p.type === 'video') { mb.style.display = 'block'; mb.innerHTML = `<video autoplay loop playsinline muted style="pointer-events: none;"><source src="${p.media}" type="video/mp4"></video>`; }
+        else if(p.type === 'image') { mb.style.display = 'block'; mb.innerHTML = `<img src="${p.media}" alt="Memory" style="pointer-events: none;">`; }
+        else mb.style.display = 'none';
+        
+        document.getElementById('puzzleModal').classList.add('active');
+      }
+    };
+    document.getElementById('btn-action').addEventListener('touchstart', doAction, {passive: false});
+    document.getElementById('btn-action').addEventListener('mousedown', doAction);
+
+    // Damage & Respawns
+    function takeDamage() {
+      if(currentHearts <= 0 || player.invuln > 0) return;
+      currentHearts--; document.getElementById('hearts').innerText = "❤️".repeat(currentHearts) + "🖤".repeat(maxHearts - currentHearts);
+      player.invuln = 300; 
+      
+      if(currentHearts <= 0) { 
+        isPaused = true; player.vx=0; player.vy=0; 
+        document.getElementById('deathModal').classList.add('active'); 
+      }
+    }
+
+    function respawn() {
+      currentHearts = maxHearts; document.getElementById('hearts').innerText = "❤️❤️❤️";
+      player.x = startPos.x; player.y = startPos.y; player.invuln = 300;
+      spawnMonsters(); 
+      document.getElementById('deathModal').classList.remove('active'); isPaused = false;
+    }
+
+    function closeModal() { document.getElementById('puzzleModal').classList.remove('active'); document.getElementById('m-media').innerHTML = ""; setTimeout(()=>{isPaused=false;}, 200); }
+    function closeAlert() { document.getElementById('alertModal').classList.remove('active'); setTimeout(()=>{isPaused=false;}, 200); }
+    function showHint() { document.getElementById('m-hint-box').style.display = 'block'; }
+
+    function triggerKeyAnimation(colorKey) {
+        let colors = { 'r': '#ff3333', 'g': '#33ff33', 'b': '#3388ff', 'p': '#ff69b4' };
+        let names = { 'r': 'Red', 'g': 'Green', 'b': 'Blue', 'p': 'Pink' };
+        
+        let container = document.getElementById('key-reveal-container');
+        let icon = document.getElementById('key-reveal-icon');
+        let text = document.getElementById('key-reveal-text');
+        
+        icon.style.color = colors[colorKey]; text.innerText = `You found the ${names[colorKey]} Key!`; text.style.color = colors[colorKey];
+        container.style.display = 'flex';
+        
+        setTimeout(() => {
+            container.style.display = 'none'; keysHeld[colorKey] = true;
+            document.getElementById(`key-${colorKey}`).classList.add('active');
+            isPaused = false;
+        }, 1500);
+    }
+
+    function checkAnswer() {
+      const input = document.getElementById('m-input').value; const feedback = document.getElementById('m-feedback');
+      const p = puzzles[activeInteractable.type];
+
+      if (p.check(input)) {
+        feedback.style.color = '#48bb78'; feedback.innerText = "Correct! 💖";
+        map[activeInteractable.r][activeInteractable.c] = '.'; 
+        
+        document.getElementById('puzzleModal').classList.remove('active'); document.getElementById('m-media').innerHTML = ""; 
+        triggerKeyAnimation(p.reward);
+        
+      } else {
+        wrongAttempts++; feedback.style.color = '#ff4d4d'; feedback.innerText = `Incorrect! Zapped! (-1 Heart)`;
+        takeDamage();
+        if (currentHearts <= 0) setTimeout(closeModal, 500); else if (wrongAttempts >= 3) showHint();
+      }
+    }
+  </script>
+</body>
+</html>

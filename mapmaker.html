@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Anniversary Game Map Builder</title>
+  <style>
+    :root { --bg: #1a0f1a; --primary: #ff4d94; --glass: #2b172b; }
+    * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; user-select: none; }
+    body { background: var(--bg); color: #fff; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+
+    /* Left Sidebar: Tools & Palette */
+    #sidebar { width: 300px; background: var(--glass); padding: 20px; border-right: 2px solid var(--primary); display: flex; flex-direction: column; overflow-y: auto; }
+    h2 { color: var(--primary); margin-top: 0; font-size: 20px; text-align: center; }
+    
+    .palette-group { margin-bottom: 20px; }
+    .palette-title { font-size: 12px; color: #aaa; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px; }
+    
+    .brush-btn { display: flex; align-items: center; background: #111; border: 2px solid #333; padding: 8px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: 0.1s; }
+    .brush-btn:hover { border-color: #666; }
+    .brush-btn.active { border-color: var(--primary); background: rgba(255, 77, 148, 0.2); box-shadow: 0 0 10px rgba(255, 77, 148, 0.5); }
+    
+    .swatch { width: 30px; height: 30px; border-radius: 4px; margin-right: 10px; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 14px; color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+    .brush-name { font-size: 14px; }
+
+    /* Center: The Grid */
+    #editor-area { flex-grow: 1; display: flex; flex-direction: column; align-items: center; padding: 20px; overflow: auto; }
+    #grid-wrapper { border: 4px solid var(--primary); background: #000; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); cursor: crosshair; }
+    .grid-row { display: flex; }
+    .grid-cell { width: 25px; height: 25px; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 12px; color: #fff; }
+
+    /* Right Sidebar: Output */
+    #output-area { width: 350px; background: var(--glass); padding: 20px; border-left: 2px solid var(--primary); display: flex; flex-direction: column; }
+    textarea { flex-grow: 1; background: #0a050a; color: #00ffcc; border: 1px solid var(--primary); border-radius: 8px; padding: 10px; font-family: monospace; font-size: 13px; resize: none; white-space: pre; outline: none; margin-bottom: 10px; }
+    
+    .action-btn { background: var(--primary); color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; transition: 0.2s; }
+    .action-btn:hover { filter: brightness(1.2); }
+    .action-btn.secondary { background: #444; }
+  </style>
+</head>
+<body>
+
+  <!-- LEFT: PALETTE -->
+  <div id="sidebar">
+    <h2>🌸 Map Builder</h2>
+    
+    <div class="palette-group" id="palette">
+      <!-- Brushes injected by JS -->
+    </div>
+
+    <div class="palette-group">
+      <div class="palette-title">Map Actions</div>
+      <button class="action-btn secondary" style="width: 100%;" onclick="fillMap('.')">Fill with Floor</button>
+      <button class="action-btn secondary" style="width: 100%;" onclick="fillMap('#')">Fill with Walls</button>
+      <button class="action-btn secondary" style="width: 100%;" onclick="drawBorder()">Draw Wall Border</button>
+    </div>
+  </div>
+
+  <!-- CENTER: GRID -->
+  <div id="editor-area">
+    <p style="color: #ccc; margin-bottom: 15px; font-weight: bold;">Size: 32x20 | Click and drag your mouse to paint!</p>
+    <div id="grid-wrapper">
+      <!-- Grid cells injected by JS -->
+    </div>
+  </div>
+
+  <!-- RIGHT: OUTPUT -->
+  <div id="output-area">
+    <h2>Code Generator</h2>
+    <p style="font-size: 13px; color: #aaa; margin-bottom: 10px; line-height: 1.4;">Copy this text and paste it into your <b>index.html</b> game file to update your map.</p>
+    <textarea id="output-code" spellcheck="false"></textarea>
+    <button class="action-btn" onclick="copyCode()">Copy to Clipboard</button>
+    
+    <div style="border-top: 1px solid #444; margin-top: 10px; padding-top: 15px;">
+      <p style="font-size: 13px; color: #aaa; margin-bottom: 10px;">Already have a map? Paste the code above and click import to edit it here.</p>
+      <button class="action-btn secondary" style="width: 100%;" onclick="importCode()">Import Map to Editor</button>
+    </div>
+  </div>
+
+  <script>
+    const COLS = 32;
+    const ROWS = 20;
+    
+    // Brush Data
+    const brushes = [
+      { id: '#', name: 'Wall', bg: '#2d3748', text: '' },
+      { id: '.', name: 'Floor', bg: '#38a169', text: '' },
+      { id: '~', name: 'Pink Decoration', bg: '#38a169', text: '🌸' },
+      { id: 'S', name: 'Player Spawn', bg: '#00ffff', text: 'S', color: '#000' },
+      { id: 'E', name: 'Final Exit', bg: '#ff00ff', text: 'E' },
+      { id: 'M', name: 'Purple Chaser', bg: '#9f7aea', text: 'M' },
+      { id: 'T', name: 'Red Territorial', bg: '#e53e3e', text: 'T' },
+      
+      { id: '1', name: 'Chest 1 (Gives Red)', bg: '#ecc94b', text: 'C1', color: '#000' },
+      { id: 'r', name: 'Red Door', bg: '#ff3333', text: 'Dr' },
+      
+      { id: '2', name: 'Chest 2 (Gives Green)', bg: '#ecc94b', text: 'C2', color: '#000' },
+      { id: 'g', name: 'Green Door', bg: '#33ff33', text: 'Dg', color: '#000' },
+      
+      { id: '3', name: 'Chest 3 (Gives Blue)', bg: '#ecc94b', text: 'C3', color: '#000' },
+      { id: 'b', name: 'Blue Door', bg: '#3388ff', text: 'Db' },
+      
+      { id: '4', name: 'Chest 4 (Gives Pink)', bg: '#ecc94b', text: 'C4', color: '#000' },
+      { id: 'p', name: 'Pink Door', bg: '#ff69b4', text: 'Dp' }
+    ];
+
+    let currentBrush = '#';
+    let mapData = [];
+    let isMouseDown = false;
+
+    // --- 1. INITIALIZE APP ---
+    function init() {
+      buildPalette();
+      
+      // Step 1: Create the empty data array FIRST
+      mapData = Array(ROWS).fill().map(() => Array(COLS).fill('.'));
+      
+      // Step 2: Build the HTML DOM grid SECOND
+      buildGrid();
+      
+      // Step 3: Now it's safe to draw the borders and render it!
+      drawBorder();
+
+      // Mouse tracking for drag-painting
+      document.body.addEventListener('mousedown', () => isMouseDown = true);
+      document.body.addEventListener('mouseup', () => isMouseDown = false);
+    }
+
+    function buildPalette() {
+      const pDiv = document.getElementById('palette');
+      brushes.forEach(b => {
+        let btn = document.createElement('div');
+        btn.className = `brush-btn ${b.id === currentBrush ? 'active' : ''}`;
+        btn.onclick = () => selectBrush(b.id);
+        btn.id = `brush-${b.id}`;
+        
+        btn.innerHTML = `
+          <div class="swatch" style="background: ${b.bg}; color: ${b.color || '#fff'}">${b.text}</div>
+          <div class="brush-name">${b.name}</div>
+        `;
+        pDiv.appendChild(btn);
+      });
+    }
+
+    function selectBrush(id) {
+      document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(`brush-${id}`).classList.add('active');
+      currentBrush = id;
+    }
+
+    // --- 2. GRID DRAWING LOGIC ---
+    function buildGrid() {
+      const wrapper = document.getElementById('grid-wrapper');
+      wrapper.innerHTML = ''; // Clear just in case
+      
+      for(let r=0; r<ROWS; r++) {
+        let rowDiv = document.createElement('div');
+        rowDiv.className = 'grid-row';
+        for(let c=0; c<COLS; c++) {
+          let cell = document.createElement('div');
+          cell.className = 'grid-cell';
+          cell.id = `cell-${r}-${c}`;
+          
+          // Drag & Click painting events
+          cell.addEventListener('mousedown', (e) => { e.preventDefault(); paintCell(r, c); });
+          cell.addEventListener('mouseover', (e) => { if(isMouseDown) paintCell(r, c); });
+          
+          rowDiv.appendChild(cell);
+        }
+        wrapper.appendChild(rowDiv);
+      }
+    }
+
+    function paintCell(r, c) {
+      mapData[r][c] = currentBrush;
+      updateCellVisual(r, c);
+      updateOutput();
+    }
+
+    function updateCellVisual(r, c) {
+      let cell = document.getElementById(`cell-${r}-${c}`);
+      if (!cell) return; // Failsafe
+      
+      let char = mapData[r][c];
+      let bData = brushes.find(b => b.id === char) || brushes[1]; // Default to floor if not found
+      
+      cell.style.background = bData.bg;
+      cell.innerText = bData.text;
+      cell.style.color = bData.color || '#fff';
+    }
+
+    function renderGrid() {
+      for(let r=0; r<ROWS; r++) {
+        for(let c=0; c<COLS; c++) {
+          updateCellVisual(r, c);
+        }
+      }
+    }
+
+    // --- 3. MAP ACTIONS ---
+    function fillMap(char) {
+      for(let r=0; r<ROWS; r++) { for(let c=0; c<COLS; c++) { mapData[r][c] = char; } }
+      renderGrid(); updateOutput();
+    }
+
+    function drawBorder() {
+      for(let r=0; r<ROWS; r++) {
+        for(let c=0; c<COLS; c++) {
+          if (r===0 || r===ROWS-1 || c===0 || c===COLS-1) mapData[r][c] = '#';
+        }
+      }
+      renderGrid(); updateOutput();
+    }
+
+    // --- 4. OUTPUT GENERATOR & IMPORTER ---
+    function updateOutput() {
+      let outStr = "let rawMap = [\n";
+      for(let r=0; r<ROWS; r++) {
+        let rowStr = mapData[r].join('');
+        outStr += `  "${rowStr}"${r < ROWS-1 ? ',' : ''}\n`;
+      }
+      outStr += "];";
+      document.getElementById('output-code').value = outStr;
+    }
+
+    function copyCode() {
+      const text = document.getElementById('output-code');
+      text.select();
+      document.execCommand('copy');
+      alert("Code copied! Paste it into your index.html file.");
+    }
+
+    function importCode() {
+      const text = document.getElementById('output-code').value;
+      // Regex to extract exactly what's inside the quotes
+      const matches = text.match(/"([^"]+)"/g);
+      
+      if (matches && matches.length === ROWS) {
+        for (let r=0; r<ROWS; r++) {
+          let rowStr = matches[r].replace(/"/g, ''); // Strip quotes
+          for (let c=0; c<COLS; c++) {
+            if (c < rowStr.length) {
+              mapData[r][c] = rowStr[c];
+            }
+          }
+        }
+        renderGrid();
+        updateOutput(); // Re-format just to be safe
+        alert("Map successfully imported!");
+      } else {
+        alert("Could not import map! Please make sure you pasted the exact 'let rawMap = [...]' block and that it has exactly 20 lines.");
+      }
+    }
+
+    // Start App
+    window.onload = init;
+
+  </script>
+</body>
+</html>
